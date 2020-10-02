@@ -1,10 +1,12 @@
 package mr
 
+import "time"
 import "fmt"
 import "log"
 import "net/rpc"
 import "hash/fnv"
-
+import "os"
+import "io/ioutil"
 
 //
 // Map functions return a slice of KeyValue.
@@ -24,18 +26,68 @@ func ihash(key string) int {
 	return int(h.Sum32() & 0x7fffffff)
 }
 
-
 //
 // main/mrworker.go calls this function.
 //
 func Worker(mapf func(string, string) []KeyValue,
 	reducef func(string, []string) string) {
+	//
+	// read each input file,
+	// pass it to Map,
+	// accumulate the intermediate Map output.
+	//
+	for {
+		taskInfo := CallAskTask()
+		switch taskInfo.State {
+		case TaskMap:
+			workerMap(mapf, taskInfo)
+		case TaskReduce:
+			workerReduce(reducef, taskInfo)
+		case TaskWait:
+			time.Sleep(time.Duration(time.Second * 2))
+		case TaskEnd:
+			fmt.Println("All tasks completed on master.")
+			return
+		default:
+			panic("Invalid Task state")
 
+		}
+	}
+	//fmt.Println(&intermediate)
 	// Your worker implementation here.
 
 	// uncomment to send the Example RPC to the master.
 	// CallExample()
 
+}
+
+func workerMap(mapf func(string, string) []KeyValue, taskInfo *TaskInfo) {
+	filename := taskInfo.FileName
+	fmt.Printf("Mapping on %v\n", filename)
+	intermediate := []KeyValue{}
+	file, err := os.Open(filename)
+	if err != nil {
+		log.Fatalf("cannot open %v", filename)
+	}
+	content, err := ioutil.ReadAll(file)
+	if err != nil {
+		log.Fatalf("cannot read %v", filename)
+	}
+	file.Close()
+	kva := mapf(filename, string(content))
+	intermediate = append(intermediate, kva...)
+}
+
+func workerReduce(reducef func(string, []string) string, taskInfo *TaskInfo) {
+	filename := taskInfo.FileName
+	fmt.Printf("Reducing on %v\n", filename)
+}
+
+func CallAskTask() *TaskInfo {
+	args := ExampleArgs{}
+	reply := TaskInfo{}
+	call("Master.AskTask", &args, &reply)
+	return &reply
 }
 
 //
@@ -44,7 +96,6 @@ func Worker(mapf func(string, string) []KeyValue,
 // the RPC argument and reply types are defined in rpc.go.
 //
 func CallExample() {
-
 	// declare an argument structure.
 	args := ExampleArgs{}
 

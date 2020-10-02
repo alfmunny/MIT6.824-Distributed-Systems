@@ -22,8 +22,21 @@ type ExampleReply struct {
 	Y int
 }
 
-// Add your RPC definitions here.
+const (
+	TaskMap    = 0
+	TaskReduce = 1
+	TaskWait   = 2
+	TaskEnd    = 3
+)
 
+// Add your RPC definitions here.
+type TaskInfo struct {
+	State     int
+	FileName  string
+	FileIndex int
+	NReduce   int
+	Nfiles    int
+}
 
 // Cook up a unique-ish UNIX-domain socket name
 // in /var/tmp, for the master.
