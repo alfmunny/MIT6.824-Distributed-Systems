@@ -34,8 +34,9 @@ type TaskInfo struct {
 	State     int
 	FileName  string
 	FileIndex int
+	PartIndex int
 	NReduce   int
-	Nfiles    int
+	NFiles    int
 }
 
 // Cook up a unique-ish UNIX-domain socket name

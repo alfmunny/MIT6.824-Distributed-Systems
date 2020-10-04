@@ -12,9 +12,12 @@ import "net/http"
 
 type Master struct {
 	// Your definitions here.
-	mapTask    TaskQueue
-	reduceTask TaskQueue
-	isDone     bool
+	mapTaskQueuing    TaskQueue
+	reduceTaskQueuing TaskQueue
+	mapTaskRunning    TaskQueue
+	reduceTaskRunning TaskQueue
+	isDone            bool
+	filenames         []string
 }
 
 type TaskQueue struct {
@@ -53,6 +56,24 @@ func (tq *TaskQueue) Push(taskInfo TaskInfo) {
 	tq.unlock()
 }
 
+func (tq *TaskQueue) Size() int {
+	return len(tq.taskArray)
+
+}
+
+func (tq *TaskQueue) RemoveTask(fileIndex int, partIndex int) {
+	tq.lock()
+	for i := 0; i < tq.Size(); {
+		taskInfo := tq.taskArray[i]
+		if (taskInfo.FileIndex == fileIndex) && (taskInfo.PartIndex == partIndex) {
+			tq.taskArray = append(tq.taskArray[:i], tq.taskArray[i+1:]...)
+		} else {
+			i++
+		}
+	}
+	tq.unlock()
+}
+
 // Your code here -- RPC handlers for the worker to call.
 
 //
@@ -66,21 +87,59 @@ func (m *Master) Example(args *ExampleArgs, reply *ExampleReply) error {
 }
 
 func (m *Master) AskTask(args *ExampleArgs, reply *TaskInfo) error {
-	if len(m.reduceTask.taskArray) > 0 {
-		taskInfo := m.reduceTask.Pop()
+	if m.reduceTaskQueuing.Size() > 0 {
+		taskInfo := m.reduceTaskQueuing.Pop()
+		m.reduceTaskRunning.Push(taskInfo)
 		*reply = taskInfo
 		fmt.Printf("%v sent to reducer\n", taskInfo.FileName)
-	} else if len(m.mapTask.taskArray) > 0 {
-		taskInfo := m.mapTask.Pop()
-		*reply = taskInfo
-		taskInfo.State = TaskReduce
-		m.reduceTask.Push(taskInfo)
-		fmt.Printf("%v sent to mapper\n", taskInfo.FileName)
-	} else {
-		reply.State = TaskEnd
-		m.isDone = true
+		return nil
 	}
 
+	if m.mapTaskQueuing.Size() > 0 {
+		taskInfo := m.mapTaskQueuing.Pop()
+		m.mapTaskRunning.Push(taskInfo)
+		*reply = taskInfo
+		fmt.Printf("%v sent to mapper\n", taskInfo.FileName)
+		return nil
+	}
+
+	if m.mapTaskRunning.Size() == 0 && m.reduceTaskRunning.Size() == 0 {
+		reply.State = TaskEnd
+		m.isDone = true
+		return nil
+	} else {
+		reply.State = TaskWait
+		return nil
+	}
+}
+
+func (m *Master) TaskDone(args *TaskInfo, reply *ExampleReply) error {
+	switch args.State {
+	case TaskMap:
+		m.mapTaskRunning.RemoveTask(args.FileIndex, args.PartIndex)
+		fmt.Printf("Map task on %vth file %v complete\n", args.FileIndex, args.FileName)
+		if m.mapTaskRunning.Size() == 0 && m.mapTaskQueuing.Size() == 0 {
+			m.createReduceTask(args)
+		}
+		break
+	case TaskReduce:
+		m.reduceTaskRunning.RemoveTask(args.FileIndex, args.PartIndex)
+		fmt.Printf("Reduce task on %vth part complete\n", args.PartIndex)
+		break
+	default:
+		panic("Wrong Task Done")
+	}
+	return nil
+}
+
+func (m *Master) createReduceTask(taskInfo *TaskInfo) error {
+	for i := 0; i < taskInfo.NReduce; i++ {
+		newTaskInfo := TaskInfo{}
+		newTaskInfo.State = TaskReduce
+		newTaskInfo.PartIndex = i
+		newTaskInfo.NFiles = len(m.filenames)
+		m.reduceTaskQueuing.Push(newTaskInfo)
+	}
 	return nil
 }
 
@@ -123,11 +182,12 @@ func (m *Master) Done() bool {
 //
 func MakeMaster(files []string, nReduce int) *Master {
 	m := Master{}
+	m.filenames = files
 
 	// Your code here.
 	for fileindex, filename := range files {
-		taskInfo := TaskInfo{TaskMap, filename, fileindex, nReduce, len(files)}
-		m.mapTask.Push(taskInfo)
+		taskInfo := TaskInfo{TaskMap, filename, fileindex, 0, nReduce, len(files)}
+		m.mapTaskQueuing.Push(taskInfo)
 	}
 
 	m.server()

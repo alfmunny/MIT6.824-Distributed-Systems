@@ -1,12 +1,18 @@
 package mr
 
-import "time"
-import "fmt"
+import (
+	"encoding/json"
+	"fmt"
+	"io/ioutil"
+	"os"
+	"sort"
+	"strconv"
+	"time"
+)
+
 import "log"
 import "net/rpc"
 import "hash/fnv"
-import "os"
-import "io/ioutil"
 
 //
 // Map functions return a slice of KeyValue.
@@ -15,6 +21,14 @@ type KeyValue struct {
 	Key   string
 	Value string
 }
+
+// for sorting by key.
+type ByKey []KeyValue
+
+// for sorting by key.
+func (a ByKey) Len() int           { return len(a) }
+func (a ByKey) Swap(i, j int)      { a[i], a[j] = a[j], a[i] }
+func (a ByKey) Less(i, j int) bool { return a[i].Key < a[j].Key }
 
 //
 // use ihash(key) % NReduce to choose the reduce
@@ -53,7 +67,6 @@ func Worker(mapf func(string, string) []KeyValue,
 
 		}
 	}
-	//fmt.Println(&intermediate)
 	// Your worker implementation here.
 
 	// uncomment to send the Example RPC to the master.
@@ -76,17 +89,107 @@ func workerMap(mapf func(string, string) []KeyValue, taskInfo *TaskInfo) {
 	file.Close()
 	kva := mapf(filename, string(content))
 	intermediate = append(intermediate, kva...)
+
+	nReduce := taskInfo.NReduce
+	outFiles := make([]*os.File, nReduce)
+	fileEncs := make([]*json.Encoder, nReduce)
+
+	outprefix := "mr-" + strconv.Itoa(taskInfo.FileIndex) + "-"
+
+	for outindex := 0; outindex < nReduce; outindex++ {
+		outname := outprefix + strconv.Itoa(outindex)
+		outFiles[outindex], err = os.Create(outname)
+		if err != nil {
+			fmt.Printf("File: %v outname, Error: %v\n", err)
+		}
+		fileEncs[outindex] = json.NewEncoder(outFiles[outindex])
+	}
+
+	for _, kv := range intermediate {
+		outindex := ihash(kv.Key) % nReduce
+		file = outFiles[outindex]
+		enc := fileEncs[outindex]
+		err := enc.Encode(&kv)
+		if err != nil {
+			fmt.Printf("File %v Key %v Value %v Error: %v\n", filename, kv.Key, kv.Value, err)
+			panic("Json encode failed")
+		}
+
+	}
+
+	CallTaskDone(taskInfo)
 }
 
 func workerReduce(reducef func(string, []string) string, taskInfo *TaskInfo) {
-	filename := taskInfo.FileName
-	fmt.Printf("Reducing on %v\n", filename)
+
+	fmt.Printf("Reducing on part %v\n", taskInfo.PartIndex)
+	//// Read all files with the same PartIndex
+
+	intermediate := []KeyValue{}
+	for i := 0; i < taskInfo.NFiles; i++ {
+		filename := "mr-" + strconv.Itoa(i) + "-" + strconv.Itoa(taskInfo.PartIndex)
+		file, err := os.Open(filename)
+		if err != nil {
+			log.Fatalf("cannot open %v", filename)
+		}
+		dec := json.NewDecoder(file)
+		for {
+			var kv KeyValue
+			if err := dec.Decode(&kv); err != nil {
+				break
+			}
+			intermediate = append(intermediate, kv)
+		}
+		file.Close()
+	}
+
+	//
+	// a big difference from real MapReduce is that all the
+	// intermediate data is in one place, intermediate[],
+	// rather than being partitioned into NxM buckets.
+	//
+
+	sort.Sort(ByKey(intermediate))
+
+	outname := "mr-out-" + strconv.Itoa(taskInfo.PartIndex)
+	ofile, _ := os.Create(outname)
+
+	//
+	// call Reduce on each distinct key in intermediate[],
+	// and print the result to mr-out-0.
+	//
+	i := 0
+	for i < len(intermediate) {
+		j := i + 1
+		for j < len(intermediate) && intermediate[j].Key == intermediate[i].Key {
+			j++
+		}
+		values := []string{}
+		for k := i; k < j; k++ {
+			values = append(values, intermediate[k].Value)
+		}
+		output := reducef(intermediate[i].Key, values)
+
+		// this is the correct format for each line of Reduce output.
+		fmt.Fprintf(ofile, "%v %v\n", intermediate[i].Key, output)
+
+		i = j
+	}
+
+	ofile.Close()
+	CallTaskDone(taskInfo)
 }
 
 func CallAskTask() *TaskInfo {
 	args := ExampleArgs{}
 	reply := TaskInfo{}
 	call("Master.AskTask", &args, &reply)
+	return &reply
+}
+
+func CallTaskDone(taskInfo *TaskInfo) *ExampleReply {
+	reply := ExampleReply{}
+	call("Master.TaskDone", taskInfo, &reply)
 	return &reply
 }
 
