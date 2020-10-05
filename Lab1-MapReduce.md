@@ -1,6 +1,6 @@
 # Lab 1: MapReduce
 
-The lab assignment you can find full description and useful hints on the [lab 1 website](https://pdos.csail.mit.edu/6.824/labs/lab-mr.html).
+You can find full description and useful hints about this lab on the [lab 1 website](https://pdos.csail.mit.edu/6.824/labs/lab-mr.html).
 
 ## Part 1: Communication and Sending Task
 
@@ -98,7 +98,7 @@ We can implement something to consume the queue.
 Every time the worker asks for a task, we send a Map task, and move it to the Reduce queue(it is maybe not the case we eventually should have, but for now, let's only see if we can communicate).
 If we have Reduce task in queue, we send it to worker immediately.
 
-worker.go
+`worker.go`
 ```go
 func CallAskTask() *TaskInfo {
 	args := ExampleArgs{}
@@ -109,7 +109,8 @@ func CallAskTask() *TaskInfo {
 ```
 
 Note that we send a `TaskEnd` if we run out of tasks on both queues.
-master.go
+
+`master.go`
 ```go
 func (m *Master) AskTask(args *ExampleArgs, reply *TaskInfo) error {
 	if len(m.reduceTask.taskArray) > 0 {
@@ -137,7 +138,7 @@ The worker asks for a task, and do the Map or Reduce, depends on the task type. 
 
 We don't implement the actual Map and Reduce now. Let them be empty.
 
-worker.go
+`worker.go`
 ```go
 func Worker(mapf func(string, string) []KeyValue,
 	reducef func(string, []string) string) {
@@ -168,7 +169,7 @@ func workerReduce(reducef func(string, []string) string, taskInfo *TaskInfo) {
 }
 ```
 
-### Run it
+### Run
 
 ```bash
 cd src/main
@@ -360,9 +361,10 @@ func workerReduce(reducef func(string, []string) string, taskInfo *TaskInfo) {
 
 ```
 
-Now we have to add mechanism to deal the running task.
+Now we have to add mechanism to deal the running tasks, since it can take a very long time. 
+We should remember them in queues and wait for a `TaskDone` call from worker to end the task.
 
-1. Add two queues in the master `mapTaskRunning` and `reduceTaskRunning`
+1. Add two queues in the master `mapTaskRunning` and `reduceTaskRunning`.
 ```go
 type Master struct {
 	mapTaskQueuing    TaskQueue
@@ -374,7 +376,7 @@ type Master struct {
 }
 
 ```
-2. Rewrite AskTask action to cope with the two queues just created
+2. Rewrite `AskTask` action to cope with the two queues we just added.
 
 ```go
 func (m *Master) AskTask(args *ExampleArgs, reply *TaskInfo) error {
@@ -404,9 +406,9 @@ func (m *Master) AskTask(args *ExampleArgs, reply *TaskInfo) error {
 	}
 }
 ```
-3. Add TaskDone action, so the worker call tell the master the task is done when it's done.
+3. Add `TaskDone` action, so the worker call tell the master the task is done when it's done.
 
-Note: We generate all the Reduce tasks only when all the Map tasks are done.
+Note: **We generate all the Reduce tasks only when all the Map tasks are done**
 
 ```go
 func (m *Master) TaskDone(args *TaskInfo, reply *ExampleReply) error {
@@ -642,4 +644,4 @@ func MakeMaster(files []string, nReduce int) *Master {
 
 ```
 
-Now if you run `sh test-mr.sh`, you should pass all tests.
+Now if you run `sh test-mr.sh`, you should pass all tests. Congrats.
