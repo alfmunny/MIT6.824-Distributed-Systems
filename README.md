@@ -18,6 +18,16 @@ Online Content:
 
 ## Notes on Lecture
 
+There are already [official notes](https://pdos.csail.mit.edu/6.824/schedule.html) for each lecture on the course website.
+
+I just try to note something I thought was interesting while I am watching the videos.
+
+1. [X] [Lecture 1: Introduction](Lecture1-Introduction.md)
+2. [ ] [Lecture 2: RPC and Threads]()
+3. [ ] [Lecture 3: GFS]()
+...
+:construction:
+
 ## Notes on Lab
 
 There are 4 labs in this course. 
