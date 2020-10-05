@@ -8,6 +8,7 @@ package mr
 
 import "os"
 import "strconv"
+import "time"
 
 //
 // example to show how to declare the arguments
@@ -31,6 +32,7 @@ const (
 
 // Add your RPC definitions here.
 type TaskInfo struct {
+	TimeStamp time.Time
 	State     int
 	FileName  string
 	FileIndex int

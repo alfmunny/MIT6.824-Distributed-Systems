@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"os"
+	"path/filepath"
 	"sort"
 	"strconv"
 	"time"
@@ -60,7 +61,7 @@ func Worker(mapf func(string, string) []KeyValue,
 		case TaskWait:
 			time.Sleep(time.Duration(time.Second * 2))
 		case TaskEnd:
-			fmt.Println("All tasks completed on master.")
+			fmt.Println("Shut down woker.")
 			return
 		default:
 			panic("Invalid Task state")
@@ -97,11 +98,7 @@ func workerMap(mapf func(string, string) []KeyValue, taskInfo *TaskInfo) {
 	outprefix := "mr-" + strconv.Itoa(taskInfo.FileIndex) + "-"
 
 	for outindex := 0; outindex < nReduce; outindex++ {
-		outname := outprefix + strconv.Itoa(outindex)
-		outFiles[outindex], err = os.Create(outname)
-		if err != nil {
-			fmt.Printf("File: %v outname, Error: %v\n", err)
-		}
+		outFiles[outindex], _ = ioutil.TempFile("", "mr-tmp-*")
 		fileEncs[outindex] = json.NewEncoder(outFiles[outindex])
 	}
 
@@ -114,7 +111,13 @@ func workerMap(mapf func(string, string) []KeyValue, taskInfo *TaskInfo) {
 			fmt.Printf("File %v Key %v Value %v Error: %v\n", filename, kv.Key, kv.Value, err)
 			panic("Json encode failed")
 		}
+	}
 
+	for outindex, file := range outFiles {
+		outname := outprefix + strconv.Itoa(outindex)
+		oldpath := filepath.Join(file.Name())
+		os.Rename(oldpath, outname)
+		file.Close()
 	}
 
 	CallTaskDone(taskInfo)
@@ -152,7 +155,7 @@ func workerReduce(reducef func(string, []string) string, taskInfo *TaskInfo) {
 	sort.Sort(ByKey(intermediate))
 
 	outname := "mr-out-" + strconv.Itoa(taskInfo.PartIndex)
-	ofile, _ := os.Create(outname)
+	ofile, _ := ioutil.TempFile("", "mr-tmp-*")
 
 	//
 	// call Reduce on each distinct key in intermediate[],
@@ -176,6 +179,7 @@ func workerReduce(reducef func(string, []string) string, taskInfo *TaskInfo) {
 		i = j
 	}
 
+	os.Rename(filepath.Join(ofile.Name()), outname)
 	ofile.Close()
 	CallTaskDone(taskInfo)
 }

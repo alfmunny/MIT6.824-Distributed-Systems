@@ -3,6 +3,7 @@ package mr
 import (
 	"fmt"
 	"sync"
+	"time"
 )
 import "log"
 import "net"
@@ -89,6 +90,7 @@ func (m *Master) Example(args *ExampleArgs, reply *ExampleReply) error {
 func (m *Master) AskTask(args *ExampleArgs, reply *TaskInfo) error {
 	if m.reduceTaskQueuing.Size() > 0 {
 		taskInfo := m.reduceTaskQueuing.Pop()
+		taskInfo.SetNow()
 		m.reduceTaskRunning.Push(taskInfo)
 		*reply = taskInfo
 		fmt.Printf("%v sent to reducer\n", taskInfo.FileName)
@@ -97,6 +99,7 @@ func (m *Master) AskTask(args *ExampleArgs, reply *TaskInfo) error {
 
 	if m.mapTaskQueuing.Size() > 0 {
 		taskInfo := m.mapTaskQueuing.Pop()
+		taskInfo.SetNow()
 		m.mapTaskRunning.Push(taskInfo)
 		*reply = taskInfo
 		fmt.Printf("%v sent to mapper\n", taskInfo.FileName)
@@ -175,6 +178,54 @@ func (m *Master) Done() bool {
 	return ret
 }
 
+func (this *TaskInfo) OutOfTime() bool {
+	return time.Now().Sub(this.TimeStamp) > time.Duration(time.Second*10)
+}
+
+func (this *TaskInfo) SetNow() {
+	this.TimeStamp = time.Now()
+}
+
+func (tq *TaskQueue) TimeOutQueue() []TaskInfo {
+	ret := make([]TaskInfo, 0)
+	tq.lock()
+	for i := 0; i < tq.Size(); {
+		t := tq.taskArray[i]
+		if t.OutOfTime() {
+			tq.taskArray = append(tq.taskArray[:i], tq.taskArray[i+1:]...)
+			ret = append(ret, t)
+		} else {
+			i++
+		}
+	}
+	tq.unlock()
+	return ret
+}
+
+func (m *Master) CollectTimeOutQueue() {
+	for {
+		time.Sleep(time.Duration(5 * time.Second))
+		timeoutQueue := m.reduceTaskRunning.TimeOutQueue()
+
+		if len(timeoutQueue) > 0 {
+			m.reduceTaskQueuing.lock()
+			m.reduceTaskQueuing.taskArray = append(m.reduceTaskQueuing.taskArray, timeoutQueue...)
+
+			m.reduceTaskQueuing.unlock()
+		}
+
+		timeoutQueue = m.mapTaskRunning.TimeOutQueue()
+
+		if len(timeoutQueue) > 0 {
+			fmt.Println(timeoutQueue)
+			m.mapTaskQueuing.lock()
+			m.mapTaskQueuing.taskArray = append(m.mapTaskQueuing.taskArray, timeoutQueue...)
+			m.mapTaskQueuing.unlock()
+
+		}
+	}
+}
+
 //
 // create a Master.
 // main/mrmaster.go calls this function.
@@ -186,9 +237,11 @@ func MakeMaster(files []string, nReduce int) *Master {
 
 	// Your code here.
 	for fileindex, filename := range files {
-		taskInfo := TaskInfo{TaskMap, filename, fileindex, 0, nReduce, len(files)}
+		taskInfo := TaskInfo{time.Now(), TaskMap, filename, fileindex, 0, nReduce, len(files)}
 		m.mapTaskQueuing.Push(taskInfo)
 	}
+
+	go m.CollectTimeOutQueue()
 
 	m.server()
 	return &m
