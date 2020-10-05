@@ -457,10 +457,171 @@ cd src/main
 sh test-mr.sh
 
 ```
-You can see we pass almost all the test, except the crash test.
+You can see we pass almost all the tests, except the crash test. That's our next topic.
 
 ## Part 3: Handle Crash
 
+To handle crash, the hints of the lab has mentioned two solutions
+
+1. Use temporary files to prevent worker from reading the unfinished intermediate. Rename it to output file after the task is done. 
+2. Use a timeout mechanism to re-start mapper or reducer. We can assume after 10 secs, if the task is still not done, we can move it back to the waiting queue.
+
+
+See all Part 3 code change [here](https://github.com/alfmunny/MIT6.824-Distributed-Systems/commit/ab979016224c7e8f58b9e44c58bf7ff45e8a1251).
+
+### Temporary files
+
+Modify the `wokerMap` and `workerReduce`.
+
+
+```go
+func workerMap(mapf func(string, string) []KeyValue, taskInfo *TaskInfo) {
+....
+	for outindex := 0; outindex < nReduce; outindex++ {
+		outFiles[outindex], _ = ioutil.TempFile("", "mr-tmp-*")
+		fileEncs[outindex] = json.NewEncoder(outFiles[outindex])
+	}
+
+	...
+
+	for outindex, file := range outFiles {
+		outname := outprefix + strconv.Itoa(outindex)
+		oldpath := filepath.Join(file.Name())
+		os.Rename(oldpath, outname)
+		file.Close()
+	}
+...
+}
+```
 
 
 
+```go
+func workerReduce(reducef func(string, []string) string, taskInfo *TaskInfo) {
+
+...
+
+	ofile, _ := ioutil.TempFile("", "mr-tmp-*")
+
+	....
+
+	os.Rename(filepath.Join(ofile.Name()), outname)
+	ofile.Close()
+	CallTaskDone(taskInfo)
+
+}
+```
+
+### Timeout
+
+We add a new field in the `TaskInfo` to record a timestamp.
+
+`rpc.go`
+```go
+type TaskInfo {
+	TimeStamp time.Time
+}
+```
+
+Collect the timeout Tasks back to queue.
+
+`master.go`
+
+```go
+func (this *TaskInfo) OutOfTime() bool {
+	return time.Now().Sub(this.TimeStamp) > time.Duration(time.Second*10)
+}
+
+func (this *TaskInfo) SetNow() {
+	this.TimeStamp = time.Now()
+}
+
+func (tq *TaskQueue) TimeOutQueue() []TaskInfo {
+	ret := make([]TaskInfo, 0)
+	tq.lock()
+	for i := 0; i < tq.Size(); {
+		t := tq.taskArray[i]
+		if t.OutOfTime() {
+			tq.taskArray = append(tq.taskArray[:i], tq.taskArray[i+1:]...)
+			ret = append(ret, t)
+		} else {
+			i++
+		}
+	}
+	tq.unlock()
+	return ret
+}
+
+func (m *Master) CollectTimeOutQueue() {
+	for {
+		time.Sleep(time.Duration(5 * time.Second))
+		timeoutQueue := m.reduceTaskRunning.TimeOutQueue()
+
+		if len(timeoutQueue) > 0 {
+			m.reduceTaskQueuing.lock()
+			m.reduceTaskQueuing.taskArray = append(m.reduceTaskQueuing.taskArray, timeoutQueue...)
+
+			m.reduceTaskQueuing.unlock()
+		}
+
+		timeoutQueue = m.mapTaskRunning.TimeOutQueue()
+
+		if len(timeoutQueue) > 0 {
+			fmt.Println(timeoutQueue)
+			m.mapTaskQueuing.lock()
+			m.mapTaskQueuing.taskArray = append(m.mapTaskQueuing.taskArray, timeoutQueue...)
+			m.mapTaskQueuing.unlock()
+
+		}
+	}
+}
+
+```
+
+Set the TimeStamp when a new Task is added to the queue.
+
+```go
+func (m *Master) AskTask(args *ExampleArgs, reply *TaskInfo) error {
+	if m.reduceTaskQueuing.Size() > 0 {
+		taskInfo := m.reduceTaskQueuing.Pop()
+		taskInfo.SetNow()
+		m.reduceTaskRunning.Push(taskInfo)
+		*reply = taskInfo
+		fmt.Printf("%v sent to reducer\n", taskInfo.FileName)
+		return nil
+	}
+
+	if m.mapTaskQueuing.Size() > 0 {
+		taskInfo := m.mapTaskQueuing.Pop()
+		taskInfo.SetNow()
+		m.mapTaskRunning.Push(taskInfo)
+		*reply = taskInfo
+		fmt.Printf("%v sent to mapper\n", taskInfo.FileName)
+		return nil
+	}
+	...
+}
+```
+
+Start the collect service. Don't forget add the `TimeStamp` to initializer.
+
+```go
+func MakeMaster(files []string, nReduce int) *Master {
+	m := Master{}
+	m.filenames = files
+
+	// Your code here.
+	for fileindex, filename := range files {
+		taskInfo := TaskInfo{time.Now(), TaskMap, filename, fileindex, 0, nReduce, len(files)}
+		m.mapTaskQueuing.Push(taskInfo)
+	}
+
+	go m.CollectTimeOutQueue()
+
+	m.server()
+	return &m
+}
+
+```
+
+Now if you run `sh test-mr.sh`, you should pass all tests.
