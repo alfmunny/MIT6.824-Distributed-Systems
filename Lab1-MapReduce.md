@@ -1,14 +1,17 @@
 # Lab 1: MapReduce
 
-## Part 1: Communication and Sending Task
+The lab assignment you can find full description and useful hints on the [lab 1 website](https://pdos.csail.mit.edu/6.824/labs/lab-mr.html).
 
-You can see all code change for Part 1 in one [commit](https://github.com/alfmunny/MIT6.824-Distributed-Systems/commit/fd0677e3480d9a395286f6f613d811320422ec80)
+## Part 1: Communication and Sending Task
 
 The first step is to setup the communication between the master and workers.
 
-### MapReduce Model
+You can see all code change for Part 1 in one [commit](https://github.com/alfmunny/MIT6.824-Distributed-Systems/commit/fd0677e3480d9a395286f6f613d811320422ec80)
+
 
 ### RPC and Task
+
+Define the entity `TaskInfo`, with which we can send through RPC between master and workers.
 
 rpc.go
 ```go
@@ -28,6 +31,9 @@ type TaskInfo struct {
 }
 ```
 
+Let's start with something simple. Only two queues, one for Map tasks, and one for Reduce tasks.
+The Queue should have a lock, in case we run into concurrency issues if we run multiple workers.
+
 master.go
 ```go
 type Master struct {
@@ -44,13 +50,11 @@ type TaskQueue struct {
 
 ### Queue, Pop and Push, and Mutex
 
+Implement some basic operations for the queue, like Pop() and Push(), lock() and unlock()
+Note that, we send a 
+
 ```go
 import "sync"
-
-type TaskQueue struct {
-	taskArray []TaskInfo
-	mutex     sync.Mutex
-}
 
 func (tq *TaskQueue) lock() {
 	tq.mutex.Lock()
@@ -87,6 +91,13 @@ func (tq *TaskQueue) Push(taskInfo TaskInfo) {
 
 ### Sending Task
 
+Now we have Task entity contains our information to send and also two queues to remember them.
+
+We can implement something to consume the queue.
+
+Every time the worker asks for a task, we send a Map task, and move it to the Reduce queue(it is maybe not the case we eventually should have, but for now, let's only see if we can communicate).
+If we have Reduce task in queue, we send it to worker immediately.
+
 worker.go
 ```go
 func CallAskTask() *TaskInfo {
@@ -97,6 +108,7 @@ func CallAskTask() *TaskInfo {
 }
 ```
 
+Note that we send a `TaskEnd` if we run out of tasks on both queues.
 master.go
 ```go
 func (m *Master) AskTask(args *ExampleArgs, reply *TaskInfo) error {
@@ -120,6 +132,10 @@ func (m *Master) AskTask(args *ExampleArgs, reply *TaskInfo) error {
 ```
 
 ### Receiving Task
+
+The worker asks for a task, and do the Map or Reduce, depends on the task type. When it receives a `TaskEnd`, it just stops.
+
+We don't implement the actual Map and Reduce now. Let them be empty.
 
 worker.go
 ```go
@@ -165,7 +181,9 @@ And in another shell
 go run mrworker wc.go
 ```
 
-You can see the worker can communicate with master about the MapReduce tasks.
+If you can see the worker communicates with master about the MapReduce tasks, great.
+
+Then we can build the hard part: Map and Reduce.
 
 ## Part 2: Map and Reduce 
 
