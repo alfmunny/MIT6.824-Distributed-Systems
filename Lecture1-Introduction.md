@@ -46,5 +46,5 @@ How to minimize network use? Because if the Map and Reduce get the file from oth
 
 Crash:
 
-1.  Map crashes: no hearbeat of worker or the task is running too long. Intermediate files should be re-created and call Reduce on them again.
-2.  Reduce crashes:
+1.  Map crashes: Intermediate files should be re-created and call Reduce on them again.
+2.  Reduce crashes: no hearbeat of worker or the task is running too long. Master call the Reduce task on other worker.
