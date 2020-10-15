@@ -5,8 +5,6 @@ Readings:
 - [Paper](https://pdos.csail.mit.edu/6.824/papers/raft-extended.pdf)
 - [Student Guide](https://thesquareplanet.com/blog/students-guide-to-raft/)
 
-First some paper notes.
-
 ## Raft basics
 
 Each server has three states:
