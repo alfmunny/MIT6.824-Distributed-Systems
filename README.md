@@ -1,20 +1,20 @@
 # MIT 6.824: Distributed Systems
 
-The 6.824 is a very interesting course of MIT on distributed systems. 
+The 6.824 is a great course on distributed systems from MIT.
 Alongside the lectures, you also have a chance to implement a basic distributed system using Go by going through 4 labs.
 You are going to learn and implement MapReduce, Raft, Sharding and a lot of other stuff.
-
-How to approach it:
-
-1. Watch the lecture videos with the handouts from the course.
-2. Read the papers 
-3. Taking your own notes.
-4. Implement the labs
 
 Online Content:
 
 - [Course Homepage](https://pdos.csail.mit.edu/6.824/index.html)
 - [Course Video](https://www.youtube.com/playlist?list=PLrw6a1wE39_tb2fErI4-WkMbsvGQk9_UB)
+
+How to approach it:
+
+1. Watch the lecture videos with the handouts from the course
+2. Read the papers
+3. Taking notes 
+4. Implement the labs(repeating the step 1 and 2)
 
 ## Notes on Lecture
 
@@ -38,6 +38,7 @@ Have a quick [introduction](https://tour.golang.org) here on the official websit
 You can also refer to this [cheatsheet of Go](https://github.com/alfmunny/cheatsheets/blob/master/go-cheatsheet.md) for a quick recap of the basics.
 
 1. [X] Lab 1: MapReduce [Website](https://pdos.csail.mit.edu/6.824/labs/lab-mr.html), [Notes](Lab1-MapReduce.md), [Code](6.824lab/src/mr) :checkered_flag:
-2. [ ] Lab 2: Raft [Website](https://pdos.csail.mit.edu/6.824/labs/lab-raft.html), [Notes](), [Code]() :soon:
+2. [ ] Lab 2: Raft [Website](https://pdos.csail.mit.edu/6.824/labs/lab-raft.html), [Code](6.894lab/src/raft) :soon:
+	- [ ] Part 2A [Notes](Lab2-Raft-2A.md)
 3. [ ] Lab 3: Fault-tolerant Key/Value Service [Website](https://pdos.csail.mit.edu/6.824/labs/lab-kvraft.html), [Notes](), [Code]()
 4. [ ] Lab 4: Sharded Key/Value Service [Website](https://pdos.csail.mit.edu/6.824/labs/lab-sharded.html), [Notes](), [Code]()
