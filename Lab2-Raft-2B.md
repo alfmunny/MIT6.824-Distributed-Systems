@@ -4,7 +4,7 @@
 
 ## Summary
 
-1. Leader receives a command(in `Start()`). It append the command to log, and update `nextIndex` and `matchIndex`
+1. Leader receives a command(in `Start()`). It appends the command to log, and updates `nextIndex` and `matchIndex`
 2. Sending the new Entries to followers while sending heartbeat.
 3. The follower receives the `AppendEntries`
   - If the follower has already all the logs before the new one, by checking the last log term and index with `PrevLogIndex` and `PrevLogTerm`, it only needs to append the new ones.
@@ -17,7 +17,7 @@
 Most important things have been mentioned in the Student Guide and the lab notes.
 However I have still gone into a frustrating one of the many loopholes.
 
-While sending heartbeat, do not forget to check the current state of the Leader. It may have been changed when the go routine is fired.
+While sending heartbeat, do not forget to check the current state of the Leader. It may have been changed at the moment the goroutine fires.
 
 For example, the leader 1 assigns two goroutines to send heartbeat to server 2 and 3. But they are not fired exactly at the same time. 
 
@@ -25,7 +25,7 @@ The goroutine for server 2 fires first, but server 2 has a higher term, it rejec
 
 Then the second goroutine for server 3 fires, but now actually the server 1 is already not a leader anymore. Although the go routine was assigned before, we should interrupt it immediately.
 
-This loopholes can cause your test `TestBackup2B` to fail.
+This loopholes can cause your test `TestBackup2B` to fail 2 in 3 times.
 
 The commit of the fix:
 
@@ -125,7 +125,7 @@ ok      _/Users/yzhang/Projects/MIT6.824-Distributed-Systems/6.824lab/src/raft  
 go test -run 2B  2.01s user 1.49s system 6% cpu 50.026 total
 ```
 
-Other interesting blogs: 
+Other interesting blogs on this topic: 
 
-https://blog.imfing.com/2020/10/mit-6.824-lab-2-raft-part-b/
-https://www.cnblogs.com/mignet/p/6824_Lab_2_Raft_2B.html
+- https://blog.imfing.com/2020/10/mit-6.824-lab-2-raft-part-b/
+- https://www.cnblogs.com/mignet/p/6824_Lab_2_Raft_2B.html
