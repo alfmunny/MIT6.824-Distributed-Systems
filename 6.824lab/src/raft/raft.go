@@ -184,7 +184,7 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 		rf.votedFor = args.CandidateId
 		rf.timestamp = time.Now()
 		reply.VoteGranted = true
-		DPrintf("Server %v votes for Candidate %v", rf.me, args.CandidateId)
+		DPrintf("Server %v votes for Candidate %v, args.LastLogTerm: %v, raft last log term: %v", rf.me, args.CandidateId, args.LastLogTerm, rf.log[len(rf.log)-1].Term)
 	}
 
 	reply.Term = rf.currentTerm
@@ -193,15 +193,15 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 func (rf *Raft) convertTo(state int) {
 	switch state {
 	case Follower:
+		DPrintf("Convert server %v from %v to %v on term %v \n", rf.me, rf.state, "Follower", rf.currentTerm)
 		rf.state = Follower
 		rf.votedFor = -1
-		DPrintf("Convert server %v from %v to %v \n", rf.me, rf.state, "Follower")
 	case Leader:
+		DPrintf("Convert server %v from %v to %v on term %v \n", rf.me, rf.state, "Leader", rf.currentTerm)
 		rf.state = Leader
-		DPrintf("Convert server %v from %v to %v \n", rf.me, rf.state, "Leader")
 	case Candidate:
+		DPrintf("Convert server %v from %v to %v on term %v \n", rf.me, rf.state, "Candidate", rf.currentTerm)
 		rf.state = Candidate
-		DPrintf("Convert server %v from %v to %v \n", rf.me, rf.state, "Candidate")
 	}
 }
 
@@ -288,18 +288,18 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 
 			rf.nextIndex[rf.me] = len(rf.log)
 			rf.matchIndex[rf.me] = len(rf.log) - 1
-			DPrintf("After replicate nextIndex: %v, matchIndex: %v, commitIndex: %v, lastApplied %v \n", rf.nextIndex[rf.me], rf.matchIndex[rf.me], rf.commitIndex, rf.lastApplied)
+			DPrintf("Server %v: After replicate nextIndex: %v, matchIndex: %v, commitIndex: %v, lastApplied %v, LastLogTerm: %v \n", rf.me, rf.nextIndex[rf.me], rf.matchIndex[rf.me], rf.commitIndex, rf.lastApplied, rf.log[len(rf.log)-1].Term)
 
+		}
+		if args.LeaderCommit > rf.commitIndex {
+			if args.LeaderCommit < len(rf.log)-1 {
+				rf.commitIndex = args.LeaderCommit
+			} else {
+				rf.commitIndex = len(rf.log) - 1
+			}
 		}
 	}
 
-	if args.LeaderCommit > rf.commitIndex {
-		if args.LeaderCommit < len(rf.log)-1 {
-			rf.commitIndex = args.LeaderCommit
-		} else {
-			rf.commitIndex = len(rf.log) - 1
-		}
-	}
 	//DPrintf("Server %v handles AppendEntries, args.Term %v, rf.currentTerm %v \n", rf.me, args.Term, rf.currentTerm)
 	if args.Term > rf.currentTerm {
 		rf.currentTerm = args.Term
@@ -435,6 +435,7 @@ func (rf *Raft) runFollower() {
 		rf.mu.Unlock()
 		rf.startElection()
 	}
+	time.Sleep(10 * time.Millisecond)
 }
 
 func (rf *Raft) runCandidate() {
@@ -447,6 +448,8 @@ func (rf *Raft) runCandidate() {
 		rf.convertTo(Leader)
 	}
 	rf.mu.Unlock()
+
+	time.Sleep(10 * time.Millisecond)
 }
 
 func (rf *Raft) sendHearbeat() {
@@ -455,16 +458,12 @@ func (rf *Raft) sendHearbeat() {
 			continue
 		}
 
-		rf.mu.Lock()
-		state := rf.state
-		rf.mu.Unlock()
-
-		if state != Leader {
-			return
-		}
-
 		go func(index int) {
 			rf.mu.Lock()
+			if rf.state != Leader {
+				rf.mu.Unlock()
+				return
+			}
 			args := AppendEntriesArgs{}
 			args.Term = rf.currentTerm
 			args.LeaderId = rf.me
@@ -475,7 +474,7 @@ func (rf *Raft) sendHearbeat() {
 				args.PrevLogIndex = rf.nextIndex[index] - 1
 				args.PrevLogTerm = rf.log[rf.nextIndex[index]-1].Term
 				args.Entries = entries
-				DPrintf("Try to replicate %v entries\n, PrevLogIndex: %v, PrevLogTerm: %v", len(entries), args.PrevLogIndex, args.PrevLogTerm)
+				DPrintf("Server %v Trying to replicate %v entries to %v, PrevLogIndex: %v, PrevLogTerm: %v\n", rf.me, len(entries), index, args.PrevLogIndex, args.PrevLogTerm)
 			} else {
 				entries := make([]Entry, 0)
 				args.Entries = entries
@@ -486,11 +485,19 @@ func (rf *Raft) sendHearbeat() {
 			reply := AppendEntriesReply{}
 			if rf.sendAppendEntries(index, &args, &reply) {
 				rf.mu.Lock()
+
+				if rf.state != Leader {
+					rf.mu.Unlock()
+					return
+				}
+
 				if reply.Term > rf.currentTerm {
 					rf.currentTerm = reply.Term
 					rf.convertTo(Follower)
 				} else if !reply.Success {
-					rf.nextIndex[index] -= 1
+					if rf.nextIndex[index] > 1 {
+						rf.nextIndex[index] -= 1
+					}
 				} else {
 					rf.matchIndex[index] = len(rf.log) - 1
 					rf.nextIndex[index] = len(rf.log)
