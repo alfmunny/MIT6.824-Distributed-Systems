@@ -4,7 +4,7 @@ Distributed Systems:
 
 -   a lot of cooperating computers, storage, MapReduce, peer-to-peer
 
-implementaiton:
+Implementation:
 
 -   RPC, threads, concurrency
 
@@ -35,16 +35,16 @@ MapReduce
 
 Import details about MapReduce
 
-1.  master gives Map tasks to workers util all Maps complete
+1.  master gives Map tasks to workers until all Maps complete
 2.  after all Maps have finished, master hands out Reduce tasks
 
-A intersting question in the online video lecture:
+A interesting question in the online video lecture:
 
 How to minimize network use? Because if the Map and Reduce get the file from other storage or another distributed storage, it still has to dealt with a lot of data traffic.
 
--   GFS server finds out where does the input files stores and try to run the Map directly on that machine. So you read the input from local disk. However the intermediate data goes over network once, because the Reduce workers have to collect the intermediate data from diffrent Map workers
+-   GFS server finds out where does the input files stores and try to run the Map directly on that machine. So you read the input from local disk. However the intermediate data goes over network once, because the Reduce workers have to collect the intermediate data from different Map workers
 
 Crash:
 
 1.  Map crashes: Intermediate files should be re-created and call Reduce on them again.
-2.  Reduce crashes: no hearbeat of worker or the task is running too long. Master call the Reduce task on other worker.
+2.  Reduce crashes: no heartbeat of worker or the task is running too long. Master call the Reduce task on other worker.
