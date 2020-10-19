@@ -179,8 +179,7 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 		rf.convertTo(Follower)
 	}
 
-	if (rf.votedFor == -1 || rf.votedFor == args.CandidateId) &&
-		args.LastLogTerm >= rf.log[len(rf.log)-1].Term && args.LastLogIndex >= len(rf.log)-1 { // 5.4.1 Election restriction
+	if (rf.votedFor == -1 || rf.votedFor == args.CandidateId) && moreUpToDate(args, rf) {
 		rf.votedFor = args.CandidateId
 		rf.timestamp = time.Now()
 		reply.VoteGranted = true
@@ -188,6 +187,19 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 	}
 
 	reply.Term = rf.currentTerm
+}
+
+func moreUpToDate(args *RequestVoteArgs, rf *Raft) bool {
+	// 5.4.1 Election restriction
+	// If the logs have last entries with different terms, then the log with the later term is more up-to-date.
+	// If the logs end with the same term, then whichever log is longer is more up-to-date.
+	if args.LastLogTerm > rf.log[len(rf.log)-1].Term ||
+		(args.LastLogTerm == rf.log[len(rf.log)-1].Term &&
+			args.LastLogIndex >= rf.log[len(rf.log)-1].Index) {
+		return true
+	} else {
+		return false
+	}
 }
 
 func (rf *Raft) convertTo(state int) {
