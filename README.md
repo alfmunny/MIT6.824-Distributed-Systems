@@ -25,6 +25,9 @@ I just try to note something I thought was interesting while I am watching the v
 1. [X] [Lecture 1: Introduction](Lecture1-Introduction.md)
 2. [ ] [Lecture 2: RPC and Threads]()
 3. [ ] [Lecture 3: GFS]()
+4. [ ] [Lecture 4: Primary-Backup Replication]()
+5. [ ] [Lecture 5: Go, Threads and Raft]()
+6. [X] [Lecture 6-7: Fault Tolerance Raft](Lecture6-7-Fault-Tolerance-Raft.md)
 ...
 :construction:
 
@@ -38,7 +41,7 @@ Have a quick [introduction](https://tour.golang.org) here on the official websit
 You can also refer to this [cheatsheet of Go](https://github.com/alfmunny/cheatsheets/blob/master/go-cheatsheet.md) for a quick recap of the basics.
 
 1. [X] Lab 1: MapReduce [Notes](Lab1-MapReduce.md), [Code](6.824lab/src/mr) :checkered_flag:
-2. [ ] Lab 2: Raft [Website](https://pdos.csail.mit.edu/6.824/labs/lab-raft.html), [Code](6.824lab/src/raft) :construction:
+2. [ ] Lab 2: Raft [Code](6.824lab/src/raft) :construction:
 	- [X] Part 2A [Notes](Lab2-Raft-2A.md)
 	- [X] Part 2B [Notes](Lab2-Raft-2B.md)
 	- [ ] Part 2C [Notes]()
