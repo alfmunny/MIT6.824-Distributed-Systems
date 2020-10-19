@@ -180,7 +180,7 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 	}
 
 	if (rf.votedFor == -1 || rf.votedFor == args.CandidateId) &&
-		args.LastLogIndex >= rf.lastApplied && args.LastLogTerm >= rf.log[len(rf.log)-1].Term {
+		args.LastLogTerm >= rf.log[len(rf.log)-1].Term && args.LastLogIndex >= len(rf.log)-1 { // 5.4.1 Election restriction
 		rf.votedFor = args.CandidateId
 		rf.timestamp = time.Now()
 		reply.VoteGranted = true
