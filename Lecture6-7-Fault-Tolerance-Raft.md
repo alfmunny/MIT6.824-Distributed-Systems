@@ -5,8 +5,8 @@ Why not longest log as leader?
 |    | Term |   |   |
 |--- |---- |--- |--- |
 | S1 | 5    | 6 | 7 |
-| S2 | 5    |   |   |
-| S3 | 5    |   |   |
+| S2 | 5    | 8 |   |
+| S3 | 5    | 8 |   |
 
 Event:
 
@@ -59,13 +59,12 @@ The leader does not have the xTerm, backs up to the first 6
 
 ## Persistence
 
-Only three items to be presisted on disk:
+Only three items to be presisted on disk: \`log[]\`, \`currentTerm\`, \`votedFor\`
 
-Log, currentTerm, votedFor
+Why not \`commitIndex\`, \`lastApplied\`?
 
-Why not commitIndex, lastApplied?
-
-    You can reconstruct commitIndex and lastApplied using the whole log, sending them to followers and which one has been committed or not.
+    You can reconstruct `commitIndex` and `lastApplied` using the whole log[],
+    sending them to followers and get to know which one has been committed or not.
 
 ## Snapshot
 
