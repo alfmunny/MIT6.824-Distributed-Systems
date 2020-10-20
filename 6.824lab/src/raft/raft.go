@@ -1,5 +1,9 @@
 package raft
 
+// Leader Server 2: 11
+// 0, 3: 41
+// 1, 4: 43
+
 //
 // this is an outline of the API that raft must expose to
 // the service (or tester). see comments below for
@@ -23,8 +27,8 @@ import "../labrpc"
 import "time"
 import "math/rand"
 
-// import "bytes"
-// import "../labgob"
+import "bytes"
+import "../labgob"
 
 //
 // as each Raft peer becomes aware that successive log entries are
@@ -108,12 +112,13 @@ func (rf *Raft) GetState() (int, bool) {
 func (rf *Raft) persist() {
 	// Your code here (2C).
 	// Example:
-	// w := new(bytes.Buffer)
-	// e := labgob.NewEncoder(w)
-	// e.Encode(rf.xxx)
-	// e.Encode(rf.yyy)
-	// data := w.Bytes()
-	// rf.persister.SaveRaftState(data)
+	w := new(bytes.Buffer)
+	e := labgob.NewEncoder(w)
+	e.Encode(rf.log)
+	e.Encode(rf.currentTerm)
+	e.Encode(rf.votedFor)
+	data := w.Bytes()
+	rf.persister.SaveRaftState(data)
 }
 
 //
@@ -125,17 +130,20 @@ func (rf *Raft) readPersist(data []byte) {
 	}
 	// Your code here (2C).
 	// Example:
-	// r := bytes.NewBuffer(data)
-	// d := labgob.NewDecoder(r)
-	// var xxx
-	// var yyy
-	// if d.Decode(&xxx) != nil ||
-	//    d.Decode(&yyy) != nil {
-	//   error...
-	// } else {
-	//   rf.xxx = xxx
-	//   rf.yyy = yyy
-	// }
+	r := bytes.NewBuffer(data)
+	d := labgob.NewDecoder(r)
+	var log []Entry
+	var currentTerm int
+	var votedFor int
+	if d.Decode(&log) != nil ||
+		d.Decode(&currentTerm) != nil ||
+		d.Decode(&votedFor) != nil {
+		panic("Decode error")
+	} else {
+		rf.log = log
+		rf.currentTerm = currentTerm
+		rf.votedFor = votedFor
+	}
 }
 
 //
@@ -167,6 +175,7 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 	// Your code here (2A, 2B).
 	rf.mu.Lock()
 	defer rf.mu.Unlock()
+	defer rf.persist()
 
 	reply.VoteGranted = false
 
@@ -185,7 +194,6 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 		reply.VoteGranted = true
 		DPrintf("Server %v votes for Candidate %v, args.LastLogTerm: %v, raft last log term: %v", rf.me, args.CandidateId, args.LastLogTerm, rf.log[len(rf.log)-1].Term)
 	}
-
 	reply.Term = rf.currentTerm
 }
 
@@ -263,6 +271,8 @@ type AppendEntriesArgs struct {
 type AppendEntriesReply struct {
 	Term    int
 	Success bool
+	XTerm   int
+	XIndex  int
 }
 
 func (rf *Raft) sendAppendEntries(server int, args *AppendEntriesArgs, reply *AppendEntriesReply) bool {
@@ -273,8 +283,10 @@ func (rf *Raft) sendAppendEntries(server int, args *AppendEntriesArgs, reply *Ap
 func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply) {
 	rf.mu.Lock()
 	defer rf.mu.Unlock()
+	defer rf.persist()
 
 	reply.Success = true
+
 	if args.Term < rf.currentTerm {
 		reply.Success = false
 		reply.Term = rf.currentTerm
@@ -283,8 +295,16 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 
 	if args.PrevLogIndex >= len(rf.log) {
 		reply.Success = false
+		reply.XIndex = len(rf.log)
+		reply.XTerm = -1
 	} else if rf.log[args.PrevLogIndex].Term != args.PrevLogTerm {
 		reply.Success = false
+		reply.XTerm = rf.log[args.PrevLogIndex].Term
+		XIndex := args.PrevLogIndex
+		for rf.log[XIndex-1].Term == reply.XTerm {
+			XIndex--
+		}
+		reply.XIndex = XIndex
 	} else {
 		if len(args.Entries) > 0 {
 			for _, entry := range args.Entries {
@@ -380,6 +400,7 @@ func (rf *Raft) Start(command interface{}) (int, int, bool) {
 		entry := Entry{Term: term, Command: command, Index: index}
 		DPrintf("New Entry %v\n", entry.Index)
 		rf.log = append(rf.log, entry)
+		rf.persist()
 		rf.nextIndex[rf.me] = len(rf.log)
 		rf.matchIndex[rf.me] = len(rf.log) - 1
 		rf.mu.Unlock()
@@ -480,17 +501,12 @@ func (rf *Raft) sendHearbeat() {
 			args.Term = rf.currentTerm
 			args.LeaderId = rf.me
 			args.LeaderCommit = rf.commitIndex
-
-			if len(rf.log)-1 >= rf.nextIndex[index] {
-				entries := rf.log[rf.nextIndex[index]:]
-				args.PrevLogIndex = rf.nextIndex[index] - 1
-				args.PrevLogTerm = rf.log[rf.nextIndex[index]-1].Term
-				args.Entries = entries
-				DPrintf("Server %v Trying to replicate %v entries to %v, PrevLogIndex: %v, PrevLogTerm: %v\n", rf.me, len(entries), index, args.PrevLogIndex, args.PrevLogTerm)
-			} else {
-				entries := make([]Entry, 0)
-				args.Entries = entries
-			}
+			prevLogIndex := rf.nextIndex[index] - 1
+			args.PrevLogIndex = prevLogIndex
+			args.PrevLogTerm = rf.log[prevLogIndex].Term
+			entries := make([]Entry, len(rf.log[(prevLogIndex+1):]))
+			copy(entries, rf.log[(prevLogIndex+1):])
+			args.Entries = entries
 
 			rf.mu.Unlock()
 
@@ -506,13 +522,24 @@ func (rf *Raft) sendHearbeat() {
 				if reply.Term > rf.currentTerm {
 					rf.currentTerm = reply.Term
 					rf.convertTo(Follower)
+					rf.persist()
 				} else if !reply.Success {
-					if rf.nextIndex[index] > 1 {
-						rf.nextIndex[index] -= 1
+					rf.nextIndex[index] = reply.XIndex
+					if reply.XTerm != -1 {
+						for i := args.PrevLogIndex; i >= 1; i-- {
+							if rf.log[i-1].Term == reply.XTerm {
+								rf.nextIndex[index] = i
+								break
+							}
+						}
 					}
 				} else {
-					rf.matchIndex[index] = len(rf.log) - 1
-					rf.nextIndex[index] = len(rf.log)
+					// rf.matchIndex[index] = len(rf.log) - 1
+					// rf.nextIndex[index] = len(rf.log)
+					// This is wrong, since the rf.log may have been changed after sendAppendEntries responsed
+					// You can't pass the Figure 8 unreliable, the nextwork loses a lot of packets. You don't always got the response immediately.
+					rf.matchIndex[index] = args.PrevLogIndex + len(args.Entries)
+					rf.nextIndex[index] = rf.matchIndex[index] + 1
 				}
 				rf.mu.Unlock()
 			}
@@ -551,6 +578,7 @@ func (rf *Raft) startElection() {
 	rf.votedFor = rf.me
 	rf.timestamp = time.Now()
 	rf.voteCount = 1
+	rf.persist()
 	rf.mu.Unlock()
 
 	for i, _ := range rf.peers {
@@ -585,6 +613,7 @@ func (rf *Raft) startElection() {
 				} else if reply.Term > rf.currentTerm {
 					rf.currentTerm = reply.Term
 					rf.convertTo(Follower)
+					rf.persist()
 				}
 				rf.mu.Unlock()
 			}
@@ -626,10 +655,10 @@ func Make(peers []*labrpc.ClientEnd, me int,
 	// log entries; each entry contains command for state machine, and term when entry was received by leader (first index is 1)
 	rf.log = append(rf.log, Entry{Term: 0})
 	DPrintf("Creating raft %v", rf.me)
-	go rf.Run()
-
 	// initialize from state persisted before a crash
 	rf.readPersist(persister.ReadRaftState())
+
+	go rf.Run()
 
 	return rf
 }
