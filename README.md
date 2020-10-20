@@ -41,10 +41,10 @@ Have a quick [introduction](https://tour.golang.org) here on the official websit
 You can also refer to this [cheatsheet of Go](https://github.com/alfmunny/cheatsheets/blob/master/go-cheatsheet.md) for a quick recap of the basics.
 
 1. [X] Lab 1: MapReduce [Notes](Lab1-MapReduce.md), [Code](6.824lab/src/mr) :checkered_flag:
-2. [ ] Lab 2: Raft [Code](6.824lab/src/raft) :construction:
+2. [X] Lab 2: Raft [Code](6.824lab/src/raft) :checkered_flag: 
 	- [X] Part 2A [Notes](Lab2-Raft-2A.md)
 	- [X] Part 2B [Notes](Lab2-Raft-2B.md)
-	- [ ] Part 2C [Notes]()
+	- [X] Part 2C [Notes](Lab2-Raft-2C.md)
 
-3. [ ] Lab 3: Fault-tolerant Key/Value Service [Website](https://pdos.csail.mit.edu/6.824/labs/lab-kvraft.html), [Notes](), [Code]()
-4. [ ] Lab 4: Sharded Key/Value Service [Website](https://pdos.csail.mit.edu/6.824/labs/lab-sharded.html), [Notes](), [Code]()
+3. [ ] Lab 3: Fault-tolerant Key/Value Service [Notes](), [Code]()
+4. [ ] Lab 4: Sharded Key/Value Service [Notes](), [Code]()
